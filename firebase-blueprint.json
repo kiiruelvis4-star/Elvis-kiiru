@@ -1,0 +1,220 @@
+{
+  "entities": {
+    "MilkEntry": {
+      "title": "MilkEntry",
+      "description": "A single milk tracking record for a given date and session (yield, delivery, or intake).",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO calendar date (YYYY-MM-DD).",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "session": {
+          "type": "string",
+          "description": "Milking or delivery session slot.",
+          "enum": ["morning", "evening", "other"]
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Volume of milk recorded (0 when skipped)."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Volume measurement unit.",
+          "enum": ["L", "gal"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Entry classification status.",
+          "enum": ["recorded", "extra", "skipped"]
+        },
+        "sourceName": {
+          "type": "string",
+          "description": "Source label such as farm batch, cow, or dairy vendor.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "Price or valuation per unit volume."
+        },
+        "totalCost": {
+          "type": "number",
+          "description": "Computed total cost or value (quantity * unitPrice)."
+        },
+        "fatPercent": {
+          "type": "number",
+          "description": "Optional butterfat percentage."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional observation or delivery note.",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-modified timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "date",
+        "session",
+        "quantity",
+        "unit",
+        "status",
+        "sourceName",
+        "unitPrice",
+        "totalCost",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MilkSource": {
+      "title": "MilkSource",
+      "description": "A reusable milk source, vendor, or herd batch preset with default unit pricing and daily target.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the milk source or vendor.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "category": {
+          "type": "string",
+          "description": "Classification of the source.",
+          "enum": ["farm", "vendor", "household"]
+        },
+        "defaultUnit": {
+          "type": "string",
+          "description": "Default volume unit for this source.",
+          "enum": ["L", "gal"]
+        },
+        "defaultRate": {
+          "type": "number",
+          "description": "Default price per unit volume."
+        },
+        "dailyTarget": {
+          "type": "number",
+          "description": "Expected daily volume for this source."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-modified timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "category",
+        "defaultUnit",
+        "defaultRate",
+        "dailyTarget",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Per-user ledger defaults and display preferences.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "preferredUnit": {
+          "type": "string",
+          "description": "Primary unit for dashboard summaries.",
+          "enum": ["L", "gal"]
+        },
+        "currencySymbol": {
+          "type": "string",
+          "description": "Currency prefix symbol for billing totals.",
+          "minLength": 1,
+          "maxLength": 5
+        },
+        "defaultRate": {
+          "type": "number",
+          "description": "Default price per unit volume."
+        },
+        "dailyGoal": {
+          "type": "number",
+          "description": "Target daily milk volume."
+        },
+        "trackingMode": {
+          "type": "string",
+          "description": "Primary ledger context.",
+          "enum": ["delivery", "production", "intake"]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-modified timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "preferredUnit",
+        "currencySymbol",
+        "defaultRate",
+        "dailyGoal",
+        "trackingMode",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/entries/{entryId}": {
+      "schema": {
+        "$ref": "#/entities/MilkEntry"
+      },
+      "description": "User-owned daily milk log entries."
+    },
+    "/users/{userId}/sources/{sourceId}": {
+      "schema": {
+        "$ref": "#/entities/MilkSource"
+      },
+      "description": "User-owned milk source and vendor presets."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/UserSettings"
+      },
+      "description": "User-owned ledger preferences (document id: preferences)."
+    }
+  }
+}

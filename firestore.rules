@@ -1,0 +1,203 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isValidMilkEntry(data, userId) {
+      return data.userId is string &&
+        data.userId == userId &&
+        isValidId(data.userId) &&
+        data.date is string &&
+        data.date.size() == 10 &&
+        data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.session is string &&
+        data.session in ['morning', 'evening', 'other'] &&
+        data.quantity is number &&
+        data.quantity >= 0 &&
+        data.quantity <= 100000 &&
+        data.unit is string &&
+        data.unit in ['L', 'gal'] &&
+        data.status is string &&
+        data.status in ['recorded', 'extra', 'skipped'] &&
+        data.sourceName is string &&
+        data.sourceName.size() >= 1 &&
+        data.sourceName.size() <= 80 &&
+        data.unitPrice is number &&
+        data.unitPrice >= 0 &&
+        data.unitPrice <= 10000 &&
+        data.totalCost is number &&
+        data.totalCost >= 0 &&
+        data.totalCost <= 10000000 &&
+        (!('fatPercent' in data) || (data.fatPercent is number && data.fatPercent >= 0 && data.fatPercent <= 25)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 300)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMilkSource(data, userId) {
+      return data.userId is string &&
+        data.userId == userId &&
+        isValidId(data.userId) &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 80 &&
+        data.category is string &&
+        data.category in ['farm', 'vendor', 'household'] &&
+        data.defaultUnit is string &&
+        data.defaultUnit in ['L', 'gal'] &&
+        data.defaultRate is number &&
+        data.defaultRate >= 0 &&
+        data.defaultRate <= 10000 &&
+        data.dailyTarget is number &&
+        data.dailyTarget >= 0 &&
+        data.dailyTarget <= 10000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserSettings(data, userId) {
+      return data.userId is string &&
+        data.userId == userId &&
+        isValidId(data.userId) &&
+        data.preferredUnit is string &&
+        data.preferredUnit in ['L', 'gal'] &&
+        data.currencySymbol is string &&
+        data.currencySymbol.size() >= 1 &&
+        data.currencySymbol.size() <= 5 &&
+        data.defaultRate is number &&
+        data.defaultRate >= 0 &&
+        data.defaultRate <= 10000 &&
+        data.dailyGoal is number &&
+        data.dailyGoal >= 0 &&
+        data.dailyGoal <= 10000 &&
+        data.trackingMode is string &&
+        data.trackingMode in ['delivery', 'production', 'intake'] &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{userId}/entries/{entryId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(entryId) && existing().userId == request.auth.uid;
+      allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(entryId) &&
+        isValidMilkEntry(incoming(), userId) &&
+        incoming().keys().hasAll([
+          'userId', 'date', 'session', 'quantity', 'unit',
+          'status', 'sourceName', 'unitPrice', 'totalCost',
+          'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'userId', 'date', 'session', 'quantity', 'unit',
+          'status', 'sourceName', 'unitPrice', 'totalCost',
+          'fatPercent', 'notes', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(entryId) &&
+        isValidMilkEntry(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'date', 'session', 'quantity', 'unit', 'status',
+            'sourceName', 'unitPrice', 'totalCost', 'fatPercent',
+            'notes', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'quantity', 'status', 'totalCost', 'updatedAt'
+          ])
+        );
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(entryId) && existing().userId == request.auth.uid;
+    }
+
+    match /users/{userId}/sources/{sourceId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(sourceId) && existing().userId == request.auth.uid;
+      allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(sourceId) &&
+        isValidMilkSource(incoming(), userId) &&
+        incoming().keys().hasAll([
+          'userId', 'name', 'category', 'defaultUnit',
+          'defaultRate', 'dailyTarget', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'userId', 'name', 'category', 'defaultUnit',
+          'defaultRate', 'dailyTarget', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(sourceId) &&
+        isValidMilkSource(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'category', 'defaultUnit', 'defaultRate', 'dailyTarget', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(sourceId) && existing().userId == request.auth.uid;
+    }
+
+    match /users/{userId}/settings/{settingId} {
+      allow get: if isOwner(userId) && isValidId(userId) && settingId == 'preferences' && existing().userId == request.auth.uid;
+      allow list: if false;
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        settingId == 'preferences' &&
+        isValidUserSettings(incoming(), userId) &&
+        incoming().keys().hasAll([
+          'userId', 'preferredUnit', 'currencySymbol',
+          'defaultRate', 'dailyGoal', 'trackingMode', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'userId', 'preferredUnit', 'currencySymbol',
+          'defaultRate', 'dailyGoal', 'trackingMode', 'updatedAt'
+        ]) &&
+        incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        settingId == 'preferences' &&
+        isValidUserSettings(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'preferredUnit', 'currencySymbol', 'defaultRate',
+          'dailyGoal', 'trackingMode', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+  }
+}
