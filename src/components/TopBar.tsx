@@ -33,12 +33,12 @@ export function TopBar({
 
   const notifyLabel =
     notifyPermission === 'granted'
-      ? 'Notifications on'
+      ? '4:00 PM alert on'
       : notifyPermission === 'denied'
-        ? 'Blocked in browser'
+        ? 'Alerts blocked'
         : notifyPermission === 'unsupported'
           ? 'Not supported'
-          : 'Allow notifications';
+          : 'Enable 4 PM alert';
 
   return (
     <header className="bg-white dark:bg-[#1d242c] border border-[#e4e9ef] dark:border-[#2b3640] rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 flex flex-wrap items-center justify-between gap-4">
@@ -87,6 +87,11 @@ export function TopBar({
           <button
             type="button"
             onClick={onRequestNotify}
+            title={
+              notifyPermission === 'granted'
+                ? 'Tap to send a test notification'
+                : 'Enable daily 4:00 PM offline reminder'
+            }
             className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-medium inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
               notifyPermission === 'granted'
                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300'

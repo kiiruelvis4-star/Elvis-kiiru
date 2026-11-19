@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { Download, Share, X } from 'lucide-react';
 import { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
@@ -6,8 +7,8 @@ export function PWAInstallButton() {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showGuide, setShowGuide] = useState(false);
 
-  // Already running as an installed offline app
-  if (isInstalled) {
+  // Already running as an installed offline app or native Android APK
+  if (isInstalled || Capacitor.isNativePlatform()) {
     return null;
   }
 

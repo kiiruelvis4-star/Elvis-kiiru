@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarCard } from './components/CalendarCard';
@@ -20,6 +21,14 @@ import {
   statusOf,
   todayKey,
 } from './utils/milkHelpers';
+import {
+  ensureAndroidDailyReminderActive,
+  fireUnifiedNotification,
+  getUnifiedNotifyPermission,
+  requestUnifiedNotifyPermission,
+  scheduleDailyFourPmAndroidReminder,
+  type UnifiedNotifyStatus,
+} from './utils/notifications';
 import { loadMilkStateFromIDB, saveMilkStateToIDB } from './utils/offlineStorage';
 
 const THEME_KEY = 'eveningMilk.theme';
@@ -39,7 +48,8 @@ function getInitialDarkMode(): boolean {
   );
 }
 
-function getNotifyPermission(): NotificationPermission | 'unsupported' {
+function getInitialNotifyPermission(): UnifiedNotifyStatus {
+  if (Capacitor.isNativePlatform()) return 'default';
   if (typeof Notification === 'undefined') return 'unsupported';
   return Notification.permission;
 }
@@ -56,8 +66,8 @@ export default function App() {
 
   const [isDark, setIsDark] = useState<boolean>(() => getInitialDarkMode());
   const [feedbackMsg, setFeedbackMsg] = useState('');
-  const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | 'unsupported'>(() =>
-    getNotifyPermission()
+  const [notifyPermission, setNotifyPermission] = useState<UnifiedNotifyStatus>(() =>
+    getInitialNotifyPermission()
   );
   const [notifyMessage, setNotifyMessage] = useState('');
 
@@ -102,6 +112,31 @@ export default function App() {
     });
   }, []);
 
+  // Sync native Android daily 4:00 PM reminder alarm & permission state on boot and focus
+  useEffect(() => {
+    let active = true;
+    const syncNotify = async () => {
+      const perm = await ensureAndroidDailyReminderActive();
+      if (!active) return;
+      setNotifyPermission(perm);
+    };
+    void syncNotify();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setNow(new Date());
+        void getUnifiedNotifyPermission().then((perm) => {
+          if (active) setNotifyPermission(perm);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
   // Persist state locally to both localStorage and IndexedDB whenever it changes
   useEffect(() => {
     const ok = persistMilkState(state);
@@ -118,56 +153,22 @@ export default function App() {
     }
   }, []);
 
-  const fireNotification = useCallback((title: string, body: string) => {
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready
-        .then((registration) =>
-          registration.showNotification(title, {
-            body,
-            icon: '/pwa-192x192.png',
-          })
-        )
-        .catch(() => {
-          try {
-            new Notification(title, {
-              body,
-              icon: '/pwa-192x192.png',
-            });
-          } catch {
-            // Ignore notification errors in restricted contexts
-          }
-        });
+  // Check daily 4:00 PM reminder (for web/PWA foreground; native Android uses OS AlarmManager at 16:00 daily)
+  const checkReminder = useCallback((currentState: EveningMilkState) => {
+    if (Capacitor.isNativePlatform()) return;
+    const current = new Date();
+    const t = todayKey();
+    if (current.getHours() < REMIND_HOUR) return;
+    if (currentState.lastReminded === t) return;
+
+    if (dayLitres(currentState.entries, t) > 0) {
+      setState((prev) => (prev.lastReminded === t ? prev : { ...prev, lastReminded: t }));
       return;
     }
-    try {
-      new Notification(title, {
-        body,
-        icon: '/pwa-192x192.png',
-      });
-    } catch {
-      // Ignore notification construction errors in restricted contexts
-    }
+
+    setState((prev) => (prev.lastReminded === t ? prev : { ...prev, lastReminded: t }));
+    void fireUnifiedNotification('Evening milk', "Log tonight's milk before you forget.");
   }, []);
-
-  // Check daily 4:00 PM reminder
-  const checkReminder = useCallback(
-    (currentState: EveningMilkState) => {
-      const current = new Date();
-      const t = todayKey();
-      if (current.getHours() < REMIND_HOUR) return;
-      if (currentState.lastReminded === t) return;
-
-      if (dayLitres(currentState.entries, t) > 0) {
-        setState((prev) => (prev.lastReminded === t ? prev : { ...prev, lastReminded: t }));
-        return;
-      }
-
-      setState((prev) => (prev.lastReminded === t ? prev : { ...prev, lastReminded: t }));
-      fireNotification('Evening milk', "Log tonight's milk before you forget.");
-    },
-    [fireNotification]
-  );
 
   // Clock & reminder tick every 30s
   useEffect(() => {
@@ -180,27 +181,41 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [state, checkReminder]);
 
-  const handleRequestNotify = useCallback(() => {
-    if (typeof Notification === 'undefined') {
-      setNotifyPermission('unsupported');
-      setNotifyMessage('Notifications not supported in this browser.');
+  const handleRequestNotify = useCallback(async () => {
+    const currentPerm = await getUnifiedNotifyPermission();
+    if (currentPerm === 'granted') {
+      if (Capacitor.isNativePlatform()) {
+        await scheduleDailyFourPmAndroidReminder();
+      }
+      await fireUnifiedNotification(
+        'Evening milk',
+        'Daily 4:00 PM offline reminder is active.'
+      );
+      setNotifyPermission('granted');
+      setNotifyMessage('4:00 PM daily reminder active · Test sent');
       return;
     }
-    Notification.requestPermission()
-      .then((permission) => {
-        setNotifyPermission(permission);
-        if (permission === 'granted') {
-          setNotifyMessage('4:00 PM reminders active');
-          checkReminder(state);
-        } else if (permission === 'denied') {
-          setNotifyMessage('Blocked. Turn on in browser settings.');
-        } else {
-          setNotifyMessage('');
-        }
-      })
-      .catch(() => {
-        setNotifyMessage('Could not request notifications.');
-      });
+
+    const permission = await requestUnifiedNotifyPermission();
+    setNotifyPermission(permission);
+    if (permission === 'granted') {
+      setNotifyMessage('4:00 PM daily reminder active');
+      await fireUnifiedNotification(
+        'Evening milk',
+        '4:00 PM daily offline reminder is now active.'
+      );
+      checkReminder(state);
+    } else if (permission === 'denied') {
+      setNotifyMessage(
+        Capacitor.isNativePlatform()
+          ? 'Blocked. Turn on in Android App Settings.'
+          : 'Blocked. Turn on in browser settings.'
+      );
+    } else if (permission === 'unsupported') {
+      setNotifyMessage('Notifications not supported on this device.');
+    } else {
+      setNotifyMessage('');
+    }
   }, [checkReminder, state]);
 
   const handleAddEntry = useCallback(

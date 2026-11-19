@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f9f8f5">
+<title>Evening Milk</title>
+<style>
+  :root {
+    --bg: #faf9f6;
+    --card: #ffffff;
+    --line: #e4e9ef;
+    --text: #1b2a38;
+    --muted: #8a96a3;
+    --accent: #0a7ec2;
+    --tonight-bg: #eef6fd;
+    --tonight-text: #0b5a8a;
+    --paid: #2e9e5b;
+    --overdue: #d64545;
+    --owing: #e8a317;
+    --none: #eef1f4;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181d;
+      --card: #1d242c;
+      --line: #2b3640;
+      --text: #e8edf2;
+      --muted: #8d99a6;
+      --accent: #4aa8e8;
+      --tonight-bg: #1a2c3a;
+      --tonight-text: #8fcaf2;
+      --none: #2a333c;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: max(12px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 520px; margin: 0 auto; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 12px 16px; margin-bottom: 14px;
+  }
+  .clock { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .clock small { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  .remind { text-align: right; font-size: 13px; color: var(--muted); }
+  .remind button, .tool {
+    margin-top: 4px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  .head { display: flex; justify-content: space-between; align-items: baseline; }
+  .head h1 { font-size: 20px; margin: 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .tonight {
+    background: var(--tonight-bg); border-radius: 14px; padding: 14px 16px; margin: 14px 0;
+    display: flex; justify-content: space-between; align-items: flex-end;
+  }
+  .tonight .label { font-size: 12px; letter-spacing: .06em; color: var(--tonight-text); }
+  .tonight .big { font-size: 40px; font-weight: 700; color: var(--tonight-text); line-height: 1.1; }
+  .tonight .big small { font-size: 18px; font-weight: 500; }
+  .tonight .right { text-align: right; }
+  .tonight .amt { font-size: 22px; font-weight: 700; color: var(--tonight-text); }
+  input {
+    width: 100%; padding: 13px 14px; font-size: 16px; border: 1px solid var(--line);
+    border-radius: 12px; background: var(--bg); color: var(--text);
+  }
+  .form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .form .seller { grid-column: 1 / -1; }
+  .form small { display: block; font-size: 11px; color: var(--muted); margin: 0 0 3px 4px; }
+  .btn {
+    padding: 13px 14px; border: none; border-radius: 12px; background: var(--accent);
+    color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .form .btn { align-self: end; }
+  .msg { min-height: 16px; font-size: 13px; color: var(--muted); margin: 4px 0 0 2px; }
+  .banner {
+    background: var(--owing); color: #fff; border-radius: 12px; padding: 10px 12px;
+    font-size: 14px; margin-bottom: 10px;
+  }
+  .banner.red { background: var(--overdue); }
+  .entry {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px;
+  }
+  .entry .sub { font-size: 12px; color: var(--muted); }
+  .del { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 2px 6px; }
+  .chart { display: flex; gap: 8px; align-items: flex-end; height: 90px; margin-top: 8px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .chart .bar { width: 100%; background: #bfe0f6; border-radius: 6px 6px 2px 2px; min-height: 3px; }
+  .chart .bar.today { background: var(--accent); }
+  .chart .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .cal-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .cal-nav button { background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 6px 12px; font-size: 16px; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+  .grid .wd { font-size: 12px; color: var(--muted); }
+  .day {
+    aspect-ratio: 1; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; background: var(--none); cursor: pointer; border: 2px solid transparent; color: var(--text);
+  }
+  .day.empty { background: transparent; cursor: default; }
+  .day.paid { background: var(--paid); color: #fff; }
+  .day.overdue { background: var(--overdue); color: #fff; }
+  .day.owing { background: var(--owing); color: #fff; }
+  .day.today { border-color: var(--accent); }
+  .day.sel { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+  .legend .l-paid::before { background: var(--paid); }
+  .legend .l-overdue::before { background: var(--overdue); }
+  .legend .l-owing::before { background: var(--owing); }
+  .legend .l-none::before { background: var(--none); }
+  .pay { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; background: var(--bg); border-radius: 12px; font-size: 15px; }
+  .pay input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--paid); }
+  .status-overdue { color: var(--overdue); font-weight: 600; }
+  .status-owing { color: var(--owing); font-weight: 600; }
+  .status-paid { color: var(--paid); font-weight: 600; }
+  .summary { display: flex; justify-content: space-between; font-size: 14px; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 7px 4px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .mismatch { color: var(--overdue); font-weight: 600; }
+  .match { color: var(--paid); font-weight: 600; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .hidden { display: none !important; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(10, 20, 30, .55);
+    display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+  }
+  .modal {
+    background: var(--card); border-radius: 20px; padding: 22px 20px; max-width: 360px; width: 100%;
+    text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+  .modal .icon { font-size: 44px; }
+  .modal h2 { font-size: 19px; margin: 8px 0; }
+  .modal p { font-size: 14px; color: var(--muted); margin: 0 0 16px; line-height: 1.4; }
+  .modal .btn { width: 100%; margin-bottom: 8px; }
+  .modal .later { background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; padding: 8px; }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="topbar">
+    <div class="clock">
+      <span id="clockTime">--:--</span>
+      <small id="clockDate"></small>
+    </div>
+    <div class="remind">
+      Reminder 4:00 PM daily<br>
+      <button onclick="requestNotify()">Allow notifications</button>
+      <div id="notifyState"></div>
+    </div>
+  </div>
+
+  <div id="bannerArea"></div>
+
+  <div class="card">
+    <div class="head">
+      <h1>🥛 Evening milk</h1>
+      <span class="muted" id="todayLabel"></span>
+    </div>
+
+    <div class="tonight">
+      <div>
+        <div class="label">TONIGHT</div>
+        <div class="big"><span id="tonightL">0.0</span> <small>L</small></div>
+      </div>
+      <div class="right">
+        <div class="label">OWED TONIGHT</div>
+        <div class="amt" id="tonightAmt">KSh 0</div>
+      </div>
+    </div>
+
+    <div class="form">
+      <div class="seller">
+        <small>Seller (optional)</small>
+        <input id="seller" placeholder="Seller (optional)" autocomplete="off">
+      </div>
+      <div>
+        <small>Litres</small>
+        <input id="litres" type="number" inputmode="decimal" min="0" step="0.25" placeholder="Litres">
+      </div>
+      <div>
+        <small>KSh / L</small>
+        <input id="rate" type="number" inputmode="decimal" min="0" step="1" value="60">
+      </div>
+      <button class="btn" onclick="addEntry()">Add</button>
+    </div>
+    <div class="msg" id="msg"></div>
+
+    <div id="tonightList"></div>
+
+    <div class="muted" style="margin-top:14px">Last 7 evenings</div>
+    <div class="chart" id="chart"></div>
+  </div>
+
+  <div class="card">
+    <div class="cal-nav">
+      <button onclick="shiftMonth(-1)">‹</button>
+      <strong id="monthTitle"></strong>
+      <button onclick="shiftMonth(1)">›</button>
+    </div>
+    <div class="grid" id="calGrid"></div>
+    <div class="legend">
+      <span class="l-paid">Paid</span>
+      <span class="l-owing">Owing</span>
+      <span class="l-overdue">Overdue (14+ days)</span>
+      <span class="l-none">No milk</span>
+    </div>
+    <div class="summary">
+      <span>Total owed: <strong id="totalOwed">KSh 0</strong></span>
+      <span>Overdue: <strong id="totalOverdue" style="color:var(--overdue)">KSh 0</strong></span>
+    </div>
+    <div class="summary">
+      <span>Next payment due</span>
+      <strong id="nextDue">–</strong>
+    </div>
+  </div>
+
+  <div class="card" id="dayCard">
+    <div class="head">
+      <h1 id="dayTitle"></h1>
+      <span class="muted" id="dayStatus"></span>
+    </div>
+    <div id="dayList"></div>
+    <div class="pay">
+      <input type="checkbox" id="paidTick" onchange="togglePaid(this.checked)">
+      <label for="paidTick">Tick when paid (next 14 days start now)</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1 style="font-size:18px;margin:0 0 4px">Compare with seller</h1>
+    <div class="muted">Export your records, send the file to your seller. Import their file to compare day by day.</div>
+    <div class="tools">
+      <button class="tool" onclick="exportData()">Export my file</button>
+      <button class="tool" onclick="document.getElementById('importFile').click()">Import seller's file</button>
+      <input type="file" id="importFile" accept="application/json,.json" class="hidden" onchange="importSellerFile(this)">
+    </div>
+    <div id="compareArea"></div>
+  </div>
+
+</main>
+
+<div class="overlay hidden" id="welcome">
+  <div class="modal">
+    <div class="icon">🔔</div>
+    <h2>Allow notifications?</h2>
+    <p>Get a reminder at 4:00 PM to log tonight's milk, and a heads-up when a payment is due.</p>
+    <button class="btn" onclick="welcomeAllow()">Allow notifications</button>
+    <button class="later" onclick="welcomeLater()">Not now</button>
+  </div>
+</div>
+
+<script>
+  const KEY = "eveningMilk.v3";
+  const OVERDUE_DAYS = 14;
+  const REMIND_HOUR = 16;
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const WD = ["M","T","W","T","F","S","S"];
+
+  let state = load();
+  let viewYear, viewMonth, selected;
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        return {
+          entries: s.entries || [],
+          paidDays: s.paidDays || {},
+          nextDue: s.nextDue || null,
+          lastRate: s.lastRate || 60,
+          lastReminded: s.lastReminded || null,
+          sellerName: s.sellerName || ""
+        };
+      }
+    } catch (e) {}
+    return { entries: [], paidDays: {}, nextDue: null, lastRate: 60, lastReminded: null, sellerName: "" };
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {
+      showMsg("Could not save on this device. Free up storage and try again.");
+    }
+  }
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function keyOf(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function todayKey() { return keyOf(new Date()); }
+  function parseKey(k) { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); }
+  function daysBetween(a, b) { return Math.round((parseKey(b) - parseKey(a)) / 86400000); }
+  function addDaysKey(k, n) { const d = parseKey(k); d.setDate(d.getDate() + n); return keyOf(d); }
+  function fmtKsh(n) { return "KSh " + Math.round(n).toLocaleString(); }
+  function fmtL(n) { return (Math.round(n * 100) / 100).toFixed(n % 1 === 0 ? 1 : 2); }
+  function fmtDate(k) { return parseKey(k).toDateString().slice(0, 10); }
+
+  function dayEntries(k) { return state.entries.filter(e => e.date === k); }
+  function dayLitres(k) { return dayEntries(k).reduce((s, e) => s + e.litres, 0); }
+  function dayOwed(k) { return dayEntries(k).reduce((s, e) => s + e.litres * e.rate, 0); }
+
+  // A day is overdue once the payment due date has passed and it is still unpaid.
+  function isOverdue(k) {
+    if (state.paidDays[k]) return false;
+    if (state.nextDue) return todayKey() >= state.nextDue && daysBetween(k, todayKey()) >= 0;
+    return daysBetween(k, todayKey()) >= OVERDUE_DAYS;
+  }
+
+  function statusOf(k) {
+    if (dayLitres(k) === 0) return "none";
+    if (state.paidDays[k]) return "paid";
+    return isOverdue(k) ? "overdue" : "owing";
+  }
+
+  function showMsg(text) {
+    const m = document.getElementById("msg");
+    m.textContent = text;
+    clearTimeout(showMsg.t);
+    showMsg.t = setTimeout(() => { m.textContent = ""; }, 2000);
+  }
+
+  function addEntry() {
+    const litres = parseFloat(document.getElementById("litres").value);
+    const rate = parseFloat(document.getElementById("rate").value);
+    const seller = document.getElementById("seller").value.trim();
+    if (!(litres > 0)) { showMsg("Enter the litres."); return; }
+    if (!(rate >= 0)) { showMsg("Enter the price per litre."); return; }
+
+    state.entries.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      date: selected,
+      litres,
+      rate,
+      seller
+    });
+    delete state.paidDays[selected];
+    state.lastRate = rate;
+    if (seller) state.sellerName = seller;
+    persist();
+
+    document.getElementById("litres").value = "";
+    document.getElementById("seller").value = "";
+    document.getElementById("rate").value = state.lastRate;
+    showMsg("Added ✓");
+    render();
+  }
+
+  function deleteEntry(id) {
+    state.entries = state.entries.filter(e => e.id !== id);
+    if (dayLitres(selected) === 0) delete state.paidDays[selected];
+    persist();
+    render();
+  }
+
+  // Ticking paid starts the next 14-day cycle from today.
+  function togglePaid(checked) {
+    if (dayLitres(selected) === 0) return;
+    if (checked) {
+      state.paidDays[selected] = true;
+      state.nextDue = addDaysKey(todayKey(), OVERDUE_DAYS);
+    } else {
+      delete state.paidDays[selected];
+    }
+    persist();
+    render();
+  }
+
+  function shiftMonth(delta) {
+    viewMonth += delta;
+    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+    renderCalendar();
+  }
+
+  // ---- Reminders and notification access ----
+
+  function notifySupported() { return typeof Notification !== "undefined"; }
+
+  function requestNotify() {
+    const el = document.getElementById("notifyState");
+    if (!notifySupported()) { el.textContent = "Notifications not supported in this browser."; return; }
+    Notification.requestPermission().then(p => {
+      el.textContent = p === "granted" ? "Notifications on ✓" : "Notifications blocked. Turn them on in browser settings.";
+      checkReminder();
+    });
+  }
+
+  function refreshNotifyLabel() {
+    const el = document.getElementById("notifyState");
+    if (!notifySupported()) { el.textContent = "Not supported here"; return; }
+    el.textContent = Notification.permission === "granted" ? "Notifications on ✓" : "Notifications off";
+  }
+
+  function fireNotification(title, body) {
+    if (!notifySupported() || Notification.permission !== "granted") return;
+    try { new Notification(title, { body }); } catch (e) {}
+  }
+
+  function checkReminder() {
+    const now = new Date();
+    const t = todayKey();
+    if (now.getHours() < REMIND_HOUR) return;
+    if (state.lastReminded === t) return;
+    if (dayLitres(t) > 0) { state.lastReminded = t; persist(); return; }
+    state.lastReminded = t;
+    persist();
+    fireNotification("Evening milk", "Log tonight's milk before you forget.");
+  }
+
+  function checkOverdueAlert() {
+    const overdueKeys = [...new Set(state.entries.map(e => e.date))].filter(k => statusOf(k) === "overdue");
+    const area = document.getElementById("bannerArea");
+    if (overdueKeys.length) {
+      const owed = overdueKeys.reduce((s, k) => s + dayOwed(k), 0);
+      area.innerHTML = '<div class="banner red">Payment overdue: ' + fmtKsh(owed) + '. Tick paid once settled.</div>';
+      if (notifySupported() && Notification.permission === "default" && !checkOverdueAlert.asked) {
+        checkOverdueAlert.asked = true;
+        requestNotify();
+      }
+    } else {
+      area.innerHTML = "";
+    }
+  }
+
+  // ---- Compare with seller ----
+
+  function exportData() {
+    const payload = {
+      app: "evening-milk",
+      exportedAt: new Date().toISOString(),
+      role: "buyer",
+      entries: state.entries.map(e => ({ date: e.date, litres: e.litres, rate: e.rate, seller: e.seller })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "evening-milk-" + todayKey() + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function importSellerFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (data.app !== "evening-milk" || !Array.isArray(data.entries)) throw new Error("bad");
+        renderCompare(data.entries);
+      } catch (e) {
+        document.getElementById("compareArea").innerHTML = '<div class="msg">That file is not a valid milk log export.</div>';
+      }
+      input.value = "";
+    };
+    reader.readAsText(file);
+  }
+
+  function sumByDate(list) {
+    const m = {};
+    list.forEach(e => { m[e.date] = (m[e.date] || 0) + Number(e.litres || 0); });
+    return m;
+  }
+
+  function renderCompare(sellerEntries) {
+    const mine = sumByDate(state.entries);
+    const theirs = sumByDate(sellerEntries);
+    const dates = [...new Set([...Object.keys(mine), ...Object.keys(theirs)])].sort().reverse();
+    const area = document.getElementById("compareArea");
+    if (dates.length === 0) { area.innerHTML = '<div class="msg">Nothing to compare yet.</div>'; return; }
+
+    let rows = "";
+    dates.forEach(k => {
+      const a = mine[k] || 0, b = theirs[k] || 0;
+      const same = Math.abs(a - b) < 0.01;
+      rows += "<tr><td>" + fmtDate(k) + "</td><td>" + fmtL(a) + "</td><td>" + fmtL(b) +
+        '</td><td class="' + (same ? "match" : "mismatch") + '">' + (same ? "Match" : "Differs") + "</td></tr>";
+    });
+    area.innerHTML = "<table><tr><th>Date</th><th>Me</th><th>Seller</th><th></th></tr>" + rows + "</table>";
+  }
+
+  // ---- Rendering ----
+
+  function renderClock() {
+    const now = new Date();
+    document.getElementById("clockTime").textContent =
+      pad(now.getHours()) + ":" + pad(now.getMinutes());
+    document.getElementById("clockDate").textContent =
+      now.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  }
+
+  function renderTonight() {
+    const t = todayKey();
+    document.getElementById("todayLabel").textContent = fmtDate(t);
+    document.getElementById("tonightL").textContent = fmtL(dayLitres(t));
+    document.getElementById("tonightAmt").textContent = fmtKsh(dayOwed(t));
+
+    const list = document.getElementById("tonightList");
+    const items = dayEntries(t);
+    if (items.length === 0) {
+      list.innerHTML = '<div class="muted" style="text-align:center;padding:12px 0">Nothing logged tonight yet.</div>';
+    } else {
+      list.innerHTML = "";
+      items.forEach(e => list.appendChild(entryRow(e)));
+    }
+  }
+
+  function entryRow(e) {
+    const row = document.createElement("div");
+    row.className = "entry";
+    const left = document.createElement("div");
+    const top = document.createElement("div");
+    top.textContent = fmtL(e.litres) + " L · " + fmtKsh(e.litres * e.rate);
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = (e.seller || "No seller") + " · KSh " + e.rate + "/L";
+    left.appendChild(top);
+    left.appendChild(sub);
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.onclick = () => deleteEntry(e.id);
+    row.appendChild(left);
+    row.appendChild(del);
+    return row;
+  }
+
+  function renderChart() {
+    const chart = document.getElementById("chart");
+    chart.innerHTML = "";
+    const days = [];
+    for (let i = 6; i >= 0; i--) days.push(addDaysKey(todayKey(), -i));
+    const max = Math.max(1, ...days.map(dayLitres));
+    days.forEach(k => {
+      const col = document.createElement("div");
+      col.className = "col";
+      const bar = document.createElement("div");
+      bar.className = "bar" + (k === todayKey() ? " today" : "");
+      bar.style.height = (dayLitres(k) / max * 100) + "%";
+      const lbl = document.createElement("div");
+      lbl.className = "lbl";
+      lbl.textContent = parseKey(k).toLocaleDateString(undefined, { weekday: "narrow" });
+      col.appendChild(bar);
+      col.appendChild(lbl);
+      chart.appendChild(col);
+    });
+  }
+
+  function renderCalendar() {
+    document.getElementById("monthTitle").textContent = MONTHS[viewMonth] + " " + viewYear;
+    const grid = document.getElementById("calGrid");
+    grid.innerHTML = "";
+    WD.forEach(w => {
+      const el = document.createElement("div");
+      el.className = "wd";
+      el.textContent = w;
+      grid.appendChild(el);
+    });
+
+    const first = new Date(viewYear, viewMonth, 1);
+    const offset = (first.getDay() + 6) % 7;
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const t = todayKey();
+
+    for (let i = 0; i < offset; i++) {
+      const el = document.createElement("div");
+      el.className = "day empty";
+      grid.appendChild(el);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const k = viewYear + "-" + pad(viewMonth + 1) + "-" + pad(d);
+      const st = statusOf(k);
+      const el = document.createElement("div");
+      el.className = "day " + st + (k === t ? " today" : "") + (k === selected ? " sel" : "");
+      el.textContent = d;
+      el.onclick = () => { selected = k; render(); };
+      grid.appendChild(el);
+    }
+  }
+
+  function renderTotals() {
+    let owed = 0, overdue = 0;
+    const dates = [...new Set(state.entries.map(e => e.date))];
+    dates.forEach(k => {
+      const st = statusOf(k);
+      if (st === "owing" || st === "overdue") owed += dayOwed(k);
+      if (st === "overdue") overdue += dayOwed(k);
+    });
+    document.getElementById("totalOwed").textContent = fmtKsh(owed);
+    document.getElementById("totalOverdue").textContent = fmtKsh(overdue);
+    document.getElementById("nextDue").textContent = state.nextDue ? fmtDate(state.nextDue) : "–";
+  }
+
+  function renderDay() {
+    const st = statusOf(selected);
+    document.getElementById("dayTitle").textContent = fmtDate(selected);
+    const statusEl = document.getElementById("dayStatus");
+    const labels = { none: "No milk", paid: "Paid", owing: "Owing", overdue: "Overdue" };
+    statusEl.textContent = labels[st];
+    statusEl.className = st === "overdue" ? "status-overdue" : st === "owing" ? "status-owing" : st === "paid" ? "status-paid" : "muted";
+
+    const list = document.getElementById("dayList");
+    const items = dayEntries(selected);
+    if (items.length === 0) {
+      list.innerHTML = '<div class="muted" style="padding:8px 0">No milk on this day. Pick a day with milk or add some above.</div>';
+    } else {
+      list.innerHTML = "";
+      items.forEach(e => list.appendChild(entryRow(e)));
+      const total = document.createElement("div");
+      total.className = "summary";
+      total.innerHTML = "<span>" + fmtL(dayLitres(selected)) + " L</span><strong>" + fmtKsh(dayOwed(selected)) + "</strong>";
+      list.appendChild(total);
+    }
+
+    const tick = document.getElementById("paidTick");
+    tick.checked = !!state.paidDays[selected];
+    tick.disabled = items.length === 0;
+  }
+
+  function render() {
+    renderClock();
+    renderTonight();
+    renderChart();
+    renderCalendar();
+    renderTotals();
+    renderDay();
+    checkOverdueAlert();
+    refreshNotifyLabel();
+  }
+
+  // First-open welcome popup asking for notification access.
+  function showWelcome() {
+    if (localStorage.getItem("eveningMilk.welcomed")) return;
+    if (!notifySupported() || Notification.permission !== "default") return;
+    document.getElementById("welcome").classList.remove("hidden");
+  }
+
+  function closeWelcome() {
+    localStorage.setItem("eveningMilk.welcomed", "1");
+    document.getElementById("welcome").classList.add("hidden");
+  }
+
+  function welcomeAllow() {
+    closeWelcome();
+    requestNotify();
+  }
+
+  function welcomeLater() {
+    closeWelcome();
+  }
+
+  (function init() {
+    const now = new Date();
+    viewYear = now.getFullYear();
+    viewMonth = now.getMonth();
+    selected = todayKey();
+    document.getElementById("rate").value = state.lastRate;
+    render();
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+    showWelcome();
+    checkReminder();
+    setInterval(() => { renderClock(); checkReminder(); }, 30000);
+  })();
+</script>
+</body>
+</html>
