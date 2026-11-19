@@ -1,10 +1,17 @@
-import { Check, Download, Upload, X } from 'lucide-react';
+import { Check, Download, HardDriveDownload, HardDriveUpload, Upload, X } from 'lucide-react';
 import { useRef, useState, type ChangeEvent } from 'react';
-import type { CompareRow, MilkLogEntry, SellerExportEntry, SellerExportPayload } from '../types/milk';
+import type {
+  CompareRow,
+  EveningMilkState,
+  SellerExportEntry,
+  SellerExportPayload,
+} from '../types/milk';
 import { fmtDate, fmtL, todayKey } from '../utils/milkHelpers';
+import { sanitizeState } from '../utils/offlineStorage';
 
 interface CompareSellerCardProps {
-  entries: MilkLogEntry[];
+  state: EveningMilkState;
+  onRestoreBackup: (restored: EveningMilkState) => void;
 }
 
 function sumByDate(list: { date: string; litres: number }[]): Record<string, number> {
@@ -15,17 +22,19 @@ function sumByDate(list: { date: string; litres: number }[]): Record<string, num
   return map;
 }
 
-export function CompareSellerCard({ entries }: CompareSellerCardProps) {
+export function CompareSellerCard({ state, onRestoreBackup }: CompareSellerCardProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [compareRows, setCompareRows] = useState<CompareRow[] | null>(null);
   const [compareError, setCompareError] = useState<string>('');
+  const [backupNotice, setBackupNotice] = useState<string>('');
 
   const handleExport = () => {
     const payload: SellerExportPayload = {
       app: 'evening-milk',
       exportedAt: new Date().toISOString(),
       role: 'buyer',
-      entries: entries.map((e) => ({
+      entries: state.entries.map((e) => ({
         date: e.date,
         litres: e.litres,
         rate: e.rate,
@@ -54,7 +63,7 @@ export function CompareSellerCard({ entries }: CompareSellerCardProps) {
         if (parsed?.app !== 'evening-milk' || !Array.isArray(parsed?.entries)) {
           throw new Error('Invalid file format');
         }
-        const mine = sumByDate(entries);
+        const mine = sumByDate(state.entries);
         const theirs = sumByDate(parsed.entries as SellerExportEntry[]);
         const allDates = [...new Set([...Object.keys(mine), ...Object.keys(theirs)])]
           .sort()
@@ -79,6 +88,50 @@ export function CompareSellerCard({ entries }: CompareSellerCardProps) {
       }
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExportBackup = () => {
+    const payload = {
+      app: 'evening-milk-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      state,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `evening-milk-backup-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setBackupNotice('Full backup saved to your device.');
+  };
+
+  const handleRestoreBackupFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        const candidate = parsed?.app === 'evening-milk-backup' ? parsed.state : parsed;
+        const clean = sanitizeState(candidate);
+        if (!clean) {
+          throw new Error('Invalid backup');
+        }
+        onRestoreBackup(clean);
+        setBackupNotice(`Restored ${clean.entries.length} entries locally.`);
+      } catch {
+        setBackupNotice('Could not restore — invalid backup file.');
+      }
+      if (backupInputRef.current) {
+        backupInputRef.current.value = '';
       }
     };
     reader.readAsText(file);
@@ -173,6 +226,43 @@ export function CompareSellerCard({ entries }: CompareSellerCardProps) {
           )}
         </div>
       )}
+
+      {/* Offline Full Device Backup & Restore */}
+      <div className="mt-4 pt-3.5 border-t border-[#e4e9ef] dark:border-[#2b3640]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-[#687584] dark:text-[#8d99a6]">
+            Offline backup (all entries &amp; paid days)
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="min-h-[36px] px-3 py-1.5 rounded-lg border border-[#e4e9ef] dark:border-[#2b3640] bg-[#faf9f6] dark:bg-[#14181d] text-[#1b2a38] dark:text-[#e8edf2] hover:border-[#0a7ec2] dark:hover:border-[#4aa8e8] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-colors"
+            >
+              <HardDriveDownload className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span>Save backup</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => backupInputRef.current?.click()}
+              className="min-h-[36px] px-3 py-1.5 rounded-lg border border-[#e4e9ef] dark:border-[#2b3640] bg-[#faf9f6] dark:bg-[#14181d] text-[#1b2a38] dark:text-[#e8edf2] hover:border-[#0a7ec2] dark:hover:border-[#4aa8e8] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-colors"
+            >
+              <HardDriveUpload className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span>Restore</span>
+            </button>
+            <input
+              ref={backupInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleRestoreBackupFile}
+              className="hidden"
+            />
+          </div>
+        </div>
+        {backupNotice && (
+          <p className="mt-2 text-xs font-medium text-[#0a7ec2] dark:text-[#4aa8e8]">{backupNotice}</p>
+        )}
+      </div>
     </section>
   );
 }

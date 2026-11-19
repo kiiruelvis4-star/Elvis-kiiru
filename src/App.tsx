@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarCard } from './components/CalendarCard';
 import { CompareSellerCard } from './components/CompareSellerCard';
 import { DayDetailCard } from './components/DayDetailCard';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { SplashSequence } from './components/SplashSequence';
 import { TonightCard } from './components/TonightCard';
 import { TopBar } from './components/TopBar';
@@ -19,6 +20,7 @@ import {
   statusOf,
   todayKey,
 } from './utils/milkHelpers';
+import { loadMilkStateFromIDB, saveMilkStateToIDB } from './utils/offlineStorage';
 
 const THEME_KEY = 'eveningMilk.theme';
 
@@ -30,9 +32,11 @@ function getInitialDarkMode(): boolean {
   } catch {
     // Ignore storage read errors
   }
-  return typeof window !== 'undefined' &&
+  return (
+    typeof window !== 'undefined' &&
     window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
 }
 
 function getNotifyPermission(): NotificationPermission | 'unsupported' {
@@ -58,6 +62,7 @@ export default function App() {
   const [notifyMessage, setNotifyMessage] = useState('');
 
   const msgTimerRef = useRef<number | null>(null);
+  const hydratedIDBRef = useRef(false);
 
   const showFeedback = useCallback((text: string) => {
     setFeedbackMsg(text);
@@ -81,15 +86,32 @@ export default function App() {
     }
   }, [isDark]);
 
-  // Persist state whenever it changes
+  // Recover from IndexedDB on boot if localStorage was empty
+  useEffect(() => {
+    if (hydratedIDBRef.current) return;
+    hydratedIDBRef.current = true;
+    loadMilkStateFromIDB().then((idbState) => {
+      if (idbState && idbState.entries.length > 0) {
+        setState((prev) => {
+          if (prev.entries.length === 0) {
+            return idbState;
+          }
+          return prev;
+        });
+      }
+    });
+  }, []);
+
+  // Persist state locally to both localStorage and IndexedDB whenever it changes
   useEffect(() => {
     const ok = persistMilkState(state);
+    void saveMilkStateToIDB(state);
     if (!ok) {
       showFeedback('Could not save on this device. Free up storage and try again.');
     }
   }, [state, showFeedback]);
 
-  // Request persistent storage on boot
+  // Request persistent storage on boot so the browser never evicts offline cache/data
   useEffect(() => {
     if (navigator.storage && navigator.storage.persist) {
       navigator.storage.persist().catch(() => {});
@@ -98,10 +120,30 @@ export default function App() {
 
   const fireNotification = useCallback((title: string, body: string) => {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then((registration) =>
+          registration.showNotification(title, {
+            body,
+            icon: '/pwa-192x192.png',
+          })
+        )
+        .catch(() => {
+          try {
+            new Notification(title, {
+              body,
+              icon: '/pwa-192x192.png',
+            });
+          } catch {
+            // Ignore notification errors in restricted contexts
+          }
+        });
+      return;
+    }
     try {
       new Notification(title, {
         body,
-        icon: '/assets/aistudio/icon-192_31d74467.png',
+        icon: '/pwa-192x192.png',
       });
     } catch {
       // Ignore notification construction errors in restricted contexts
@@ -265,6 +307,14 @@ export default function App() {
     setShowSplash(true);
   }, []);
 
+  const handleRestoreBackup = useCallback(
+    (restored: EveningMilkState) => {
+      setState(restored);
+      showFeedback('Backup restored ✓');
+    },
+    [showFeedback]
+  );
+
   // Overdue banner computation
   const overdueDates = [...new Set(state.entries.map((e) => e.date))].filter(
     (k) => statusOf(state, k) === 'overdue'
@@ -276,6 +326,8 @@ export default function App() {
       {showSplash && (
         <SplashSequence key={splashKey} onComplete={() => setShowSplash(false)} />
       )}
+
+      <OfflineIndicator />
 
       <div className="min-h-screen bg-[#faf9f6] dark:bg-[#14181d] text-[#1b2a38] dark:text-[#e8edf2] transition-colors">
         <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4">
@@ -315,7 +367,7 @@ export default function App() {
                 onSelectToday={handleSelectToday}
               />
 
-              <CompareSellerCard entries={state.entries} />
+              <CompareSellerCard state={state} onRestoreBackup={handleRestoreBackup} />
             </div>
 
             <div className="lg:col-span-6 space-y-4">

@@ -1,6 +1,7 @@
 import { Bell, BellOff, Moon, RotateCcw, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { pad } from '../utils/milkHelpers';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface TopBarProps {
   now: Date;
@@ -80,6 +81,8 @@ export function TopBar({
 
       {/* Right: Controls */}
       <div className="flex items-center gap-2 flex-wrap">
+        <PWAInstallButton />
+
         <div className="flex flex-col items-end">
           <button
             type="button"
